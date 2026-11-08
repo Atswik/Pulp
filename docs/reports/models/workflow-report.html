@@ -1,0 +1,262 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>GLM and MiniCPM Page Recognition with Qwen Formula Detection</title><link rel="stylesheet" href="../../../macos/Sources/Pulp/Resources/katex.min.css"><script defer src="../../../macos/Sources/Pulp/Resources/katex.min.js"></script><script defer src="../../../macos/Sources/Pulp/Resources/auto-render.min.js"></script><style>body{font:16px system-ui;color:#18202b;margin:2rem}h1,h2,h3{line-height:1.2}.columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}.crop{display:grid;grid-template-columns:1fr 1fr;gap:1rem}img{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 system-ui;background:#f3f5f7;padding:1rem}.overlay{max-width:40rem}article,section{border-top:1px solid #ccc;margin-top:1rem}summary{cursor:pointer;margin:1rem 0}@media(max-width:900px){.columns,.crop{grid-template-columns:1fr}}</style><h1>GLM and MiniCPM Page Recognition with Qwen Formula Detection</h1><p>MiniCPM SDK uses PP-DocLayoutV3 torch on CPU with orientation correction disabled and MiniCPM OCR through a local server. GLM reads each full page directly. Qwen proposals are formula-only, not a complete page pipeline. The eleven standalone-formula references are provisional and inline notation is not exhaustively labeled. All output is uncorrected.</p><section><h2>handwriting-4-1</h2><div class="columns"><div><h3>Original page</h3><img src="pages/handwriting-4-1.png" alt="Original handwritten page"></div><div><h3>MiniCPM SDK assembled Markdown</h3><pre class="math">Tuesday
+
+3. Log Likelihood:
+
+As logarithm is a strictly
+
+increasing function, whatever
+
+maximizes the log-likelihood will also
+
+maximize the original likelihood
+
+\[
+\begin{array}{l} l (w) = \log (L (w)) \\ l (w) = \sum_{i = 1}^{n} [ y_{i} \log (\hat{y}_{i}) + (1 - y_{i}) \log (1 - \hat{y}_{i}) ] \\ \end{array}
+\]
+
+Gradient Ascent:
+
+\[w_{new} = w_{old} + \alpha \nabla l(w)\]
+
+5. Update Rule
+
+\[
+\begin{array}{l} \Delta l (w) = (y - \hat{y}) \cdot x \\ w_{new} = w_{old} + \alpha (y - \hat{y}) x \end{array}
+\]</pre></div><div><h3>GLM direct whole-page output</h3><pre class="math">3. Log Likelihood:
+As logarithm is a strictly increasing function, whatever maximizes the log-likelihood will also maximize the original likelihood
+
+$$e(W) = \log(L(W))$$
+
+$$e(W) = \sum_{i=1}^{n} [y_i \log(\hat{y}_i) + (1-y_i) \log(1-\hat{y}_i)]$$
+
+4. Gradient Ascent:
+$$W_{\text{new}} = W_{\text{old}} + \alpha \nabla e(W)$$
+
+5. Update Rule
+$$\nabla e(W) = (y - \hat{y}) \cdot x$$
+$$W_{\text{new}} = W_{\text{old}} + \alpha (y - \hat{y}) x$$
+
+&quot;I may not have gone where I intended to go, but I think I have ended up where I needed to be.&quot;</pre></div></div><details><summary>Qwen 4B proposals + MiniCPM recognition (5)</summary><img class="overlay" src="holdout/handwriting-4-1-overlay-4b.png" alt="Qwen boxes and provisional references"><article><h4>Proposal 1</h4><p>Overlaps provisional reference 4a-log (IoU 0.835); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-1-1.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(\ell(w)=\log(L(w))\)</span></div><pre class="math">\[
+e(w)=\log(L(w))
+\]</pre></div></div></article><article><h4>Proposal 2</h4><p>Overlaps provisional reference 4a-sum (IoU 0.922); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-1-2.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(\ell(w)=\sum_{i=1}^{n}[y_i\log(\hat{y}_i)+(1-y_i)\log(1-\hat{y}_i)]\)</span></div><pre class="math">\[
+l (w) = \sum_{i = 1}^{n} [ y_{i} \log (\hat{y}_{i}) + (1 - y_{i}) \log (1 - \hat{y}_{i}) ]
+\]</pre></div></div></article><article><h4>Proposal 3</h4><p>Overlaps provisional reference 4a-ascent (IoU 0.745); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-1-3.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(w_{new}=w_{old}+\alpha\cdot\nabla\ell(w)\)</span></div><pre class="math">\[
+W_{new}=W_{old}+\alpha.\nabla l(W)
+\]</pre></div></div></article><article><h4>Proposal 4</h4><p>Overlaps provisional reference 4a-gradient (IoU 0.753); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-1-4.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(\nabla\ell(w)=(y-\hat{y})\cdot x\)</span></div><pre class="math">\[
+\Delta l ( \omega ) = ( y - \hat{y} ) \cdot x
+\]</pre></div></div></article><article><h4>Proposal 5</h4><p>Overlaps provisional reference 4a-update (IoU 0.791); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-1-5.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(w_{new}=w_{old}+\alpha(y-\hat{y})x\)</span></div><pre class="math">\[
+w_{new}=w_{old}+\alpha(y-\hat{y})x
+\]</pre></div></div></article></details></section><section><h2>handwriting-4-2</h2><div class="columns"><div><h3>Original page</h3><img src="pages/handwriting-4-2.png" alt="Original handwritten page"></div><div><h3>MiniCPM SDK assembled Markdown</h3><pre class="math">Feed forward (FF) In a standard network, every input is independent.
+
+Recurrent cells have state, if processes sequences (PNN)
+
+cells take two inputs: current data(
+
+An RNN cell takes two inputs: current data ($x_t$) and hidden state ($h_{t-1}$) from previous step.
+
+The output of the cell loops back into itself to help process the next input.
+
+1. one-to-one : standard feedforward NN
+
+Ex: Image → Label
+
+2. one-to-many : single input sequence output
+
+Ex: Image → caption
+
+3. Many-to-one: sequence input, single output
+
+Ex: sentence → sentiment
+
+4. Many to Many
+
+sequence in, sequence out
+
+Ex: Translation.
+
+MAY</pre></div><div><h3>GLM direct whole-page output</h3><pre class="math">Types of sequence models
+
+May 2025
+Week 19
+
+Feedforward (FF)
+
+In a standard network, every input is independent.
+
+Recurrent cells have state, it processes sequences (RNN)
+
+An RNN cell takes two inputs: current data ($k$) and hidden state ($h_{f-1}$)
+
+from previous step.
+
+The output of the cell loops back into itself to help process the next input.
+
+1. One-to-one; standard feedforward NN
+   Ex: Image → Label
+
+2. One-to-many: single input sequence output
+   Ex: Image → caption
+
+3. Many-to-one: sequence input, single output
+   Ex: sentence → sentiment
+
+4. Many-to-Many
+   sequence in, sequence out
+   Ex: Translation.</pre></div></div><details><summary>Qwen 4B proposals + MiniCPM recognition (3)</summary><img class="overlay" src="holdout/handwriting-4-2-overlay-4b.png" alt="Qwen boxes and provisional references"><article><h4>Proposal 1</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-2-1.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{two inputs: current data}(x_t)
+\]</pre></div></div></article><article><h4>Proposal 2</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-2-2.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{andhiddenstate}(n_{t}-1)
+\]</pre></div></div></article><article><h4>Proposal 3</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-4-2-3.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{from previous step.}
+\]</pre></div></div></article></details></section><section><h2>handwriting-5-1</h2><div class="columns"><div><h3>Original page</h3><img src="pages/handwriting-5-1.png" alt="Original handwritten page"></div><div><h3>MiniCPM SDK assembled Markdown</h3><pre class="math">If a poll reports:
+
+&quot;52% ± 3% at 95% confidence&quot;
+
+It means 95%.
+
+We are confident that the true population proportion lies between 49% and 55%.
+
+Monday
+
+139-226
+
+$r^{2}$ → coefficient of determination
+
+This represents the proportion of variance in the data that our model explains.
+
+An $R^{2}$ of 0.80 means that our model explains 80% of variation in the target variable.
+
+RSE (Residual Standard Error)
+
+If answers &quot;On Avg, how far are predictor/
+
+from actual values?&quot;
+
+p-values
+
+small p-value ( $\leq 0.05$ ) $\rightarrow$ evidence predictor matters
+
+Large p-value $\rightarrow$ predictor may not be useful.
+
+A low p-value means you can reject the null (60.05) hypothesis that the coefficient is zero.</pre></div><div><h3>GLM direct whole-page output</h3><pre class="math">If a poll reports:
+&quot;52% ± 3% at 95% confidence&quot;
+
+It means 95%.
+We are confident that the true population proportion lies between 49% and 55%.
+
+$R^2 \rightarrow$ coefficient of determination.
+This represents the proportion of variance in the data that our model explains.
+
+An $R^2$ of 0.80 means that our model explains 80% of variation in the target variable.
+
+RSE (Residual Standard Error)
+It answers &quot;On Arg, how far are predictors from actual values?&quot;
+
+P-values
+Small $p$-value ($\leq 0.05$) $\rightarrow$ evidence predictor matters
+Large $p$-value $\rightarrow$ predictor may not be useful.
+
+A low $p$-value means you can reject the null hypothesis that the coefficient is zero.</pre></div></div><details><summary>Qwen 4B proposals + MiniCPM recognition (7)</summary><img class="overlay" src="holdout/handwriting-5-1-overlay-4b.png" alt="Qwen boxes and provisional references"><article><h4>Proposal 1</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-1.png" alt="Qwen proposal crop"><div><pre class="math">\[
+r^{2}\rightarrow\text{coefficientofdetermination}
+\]</pre></div></div></article><article><h4>Proposal 2</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-2.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\begin{array}{l} \text{This represents the proportion of variance.} \\ \text{in the data that our model explains.} \end{array}
+\]</pre></div></div></article><article><h4>Proposal 3</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-3.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\begin{array}{l} \text{An } R^2 \text{ of 0.80 means that our model explains} \\ \text{80\% of variation in the target variable.} \end{array}
+\]</pre></div></div></article><article><h4>Proposal 4</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-4.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\begin{array}{l} \text{It answers &quot;On Avg, how far are prediction}\\ \text{from actual values?&quot;} \end{array}
+\]</pre></div></div></article><article><h4>Proposal 5</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-5.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{small } p \text{-value} (\leq 0.05) \to \text{evidence predictor}
+\]</pre></div></div></article><article><h4>Proposal 6</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-6.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{Largep-value}\rightarrow\text{predictormaynotbeuseful.}
+\]</pre></div></div></article><article><h4>Proposal 7</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-1-7.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\begin{array}{l} \text{A low p-value means you can reject the null} \\ (80.05) \\ \text{that the coefficient is zero.} \end{array}
+\]</pre></div></div></article></details></section><section><h2>handwriting-5-2</h2><div class="columns"><div><h3>Original page</h3><img src="pages/handwriting-5-2.png" alt="Original handwritten page"></div><div><h3>MiniCPM SDK assembled Markdown</h3><pre class="math">22
+
+Thursday
+
+If a partition is lost, spark recomputes
+
+it from lineage.
+
+Dataframe
+
+→ distributed table with
+
+named columns (like SQL)
+
+Dataset
+
+Ytype=safe version
+
+of Dataframes
+
+Decision Boundary
+
+$w \cdot x + b = 0$
+
+Positive margin plane
+
+$w \cdot x + b = +1$
+
+“
+
+Negative
+
+$w \cdot x + b = -1$.
+
+only support vectors affect
+
+the position of the
+
+decision boundary.
+
+Hidden layers allow neural networks to represent non-linear decision bound aries.
+
+tanh(x)
+
+\[
+\sigma (x) = \frac{1}{1 + e^{- x}}
+\]</pre></div><div><h3>GLM direct whole-page output</h3><pre class="math">If a partition is lost, spark recomputes it from lineage.
+
+DataFrame
+distributed table with named columns like SQL
+
+Dataset
+type-safe version of DataFrames
+
+Decision Boundary
+$w \cdot x + b = 0$
+positive margin plane
+$w \cdot x + b = +1$
+negative
+$w \cdot x + b = -1$
+
+Margin = $\frac{2}{||w||}$
+
+only support vectors affect the position of the decision boundary.
+
+Hidden layers allow neural networks to represent non-linear decision boundaries.
+
+$\sigma(x) = \frac{1}{1 + e^{-x}}$
+
+&quot;Don&#x27;t be pushed around by the fears in your mind. Be led by the dreams in your heart.&quot;</pre></div></div><details><summary>Qwen 4B proposals + MiniCPM recognition (10)</summary><img class="overlay" src="holdout/handwriting-5-2-overlay-4b.png" alt="Qwen boxes and provisional references"><article><h4>Proposal 1</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-1.png" alt="Qwen proposal crop"><div><pre class="math">\[
+x + b = 0
+\]</pre></div></div></article><article><h4>Proposal 2</h4><p>Overlaps provisional reference 5b-boundary (IoU 0.548); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-2.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(w\cdot x+b=0\)</span></div><pre class="math">\[
+w \cdot x + b = 0
+\]</pre></div></div></article><article><h4>Proposal 3</h4><p>Overlaps provisional reference 5b-margin (IoU 0.683); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-3.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(\text{Margin}=\frac{2}{\lVert w\rVert}\)</span></div><pre class="math">\[
+\text{Margin}=\frac{2}{||w||}
+\]</pre></div></div></article><article><h4>Proposal 4</h4><p>Overlaps provisional reference 5b-positive (IoU 0.658); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-4.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(w\cdot x+b=+1\)</span></div><pre class="math">\[
+\text{positive many}\\ w \cdot x + b = + 2
+\]</pre></div></div></article><article><h4>Proposal 5</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-5.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{onlysupportvectorsaffected}
+\]</pre></div></div></article><article><h4>Proposal 6</h4><p>Overlaps provisional reference 5b-negative (IoU 0.635); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-6.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(w\cdot x+b=-1\)</span></div><pre class="math">\[
+\text{Negative} &quot; w \cdot x + b = -1.
+\]</pre></div></div></article><article><h4>Proposal 7</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-7.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{thepositionofthe}
+\]</pre></div></div></article><article><h4>Proposal 8</h4><p>No match in the standalone-only reference set; this may contain other notation or text.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-8.png" alt="Qwen proposal crop"><div><pre class="math">\[
+\text{decisionboundary}
+\]</pre></div></div></article><article><h4>Proposal 9</h4><p>Overlaps provisional reference 5b-tanh (IoU 0.417); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-9.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(\tanh(x)\)</span></div><pre class="math">\[
+tanh(x)
+\]</pre></div></div></article><article><h4>Proposal 10</h4><p>Overlaps provisional reference 5b-sigmoid (IoU 0.858); does not guarantee a complete crop.</p><div class="crop"><img src="holdout/qwen4b-minicpm-crops/handwriting-5-2-10.png" alt="Qwen proposal crop"><div><div>Draft reference: <span class="math">\(\sigma(x)=\frac{1}{1+e^{-x}}\)</span></div><pre class="math">\[
+\sigma (x) = \frac{1}{1 + e^{- x}}
+\]</pre></div></div></article></details></section><script>window.addEventListener('DOMContentLoaded',()=>document.querySelectorAll('.math').forEach(el=>renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false})));</script></html>

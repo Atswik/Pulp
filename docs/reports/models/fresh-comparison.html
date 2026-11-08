@@ -1,0 +1,212 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>GLM vs. MiniCPM: Five-Page Recognition and Timing Comparison</title><link rel="stylesheet" href="../../../macos/Sources/Pulp/Resources/katex.min.css"><script defer src="../../../macos/Sources/Pulp/Resources/katex.min.js"></script><script defer src="../../../macos/Sources/Pulp/Resources/auto-render.min.js"></script><style>body{font:16px system-ui;color:#18202b;margin:2rem}h1,h2,h3{line-height:1.2}.cols{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:1rem;align-items:start}img{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.55 system-ui;background:#f3f5f7;padding:1rem}section{border-top:1px solid #ccc;margin-top:2rem}figure{margin:0 0 1rem}figcaption{font-size:.85rem}@media(max-width:900px){.cols{grid-template-columns:1fr}}</style><h1>GLM vs. MiniCPM: Five-Page Recognition and Timing Comparison</h1><p>Original, SDK output and GLM output on the same five page images. These are raw model results, not corrected transcriptions. SDK image regions show original crops, not selectable recognized text. Page timings measure different operations and are not a controlled speed comparison.</p><p><a href="fresh-reference-review.html">View the reviewed references</a></p><section><h2>handwriting-6-1</h2><div class="cols" style="--n:3"><div><h3>Original</h3><img src="pages/handwriting-6-1.png" alt="Original handwriting-6-1"></div><div><h3>MiniCPM SDK</h3><p>9.14 s, process wall time</p><pre class="math">$P(E, \overline{D}, S, G, \overline{L})$
+
+$P(\overline{L}|E, \overline{D}, S, G) P(E, \overline{D}, S, G)$
+
+$= P(\overline{L}|G) P(E, \overline{D}, S, G)$
+
+$= P(\overline{L}|G) P(S|E, \overline{D}, G) P(E, \overline{D}, G)$
+
+$= P(\overline{L}|G) P(S|E) P(E, \overline{D}, G)$
+
+$= P(\overline{L}|G) P(S|E) P(G|E, \overline{D}) P(E, \overline{D})$
+
+$= P(\overline{L}|G) P(S|E) P(G|E, \overline{D}) P(E) P(\overline{D})$
+
+$= 0.1 \times 0.8 \times 0.8 \times \frac{2}{3} \times \frac{2}{3}$
+
+$= \frac{1}{10} \times \frac{8}{10} \times \frac{8}{10} \times \frac{2}{3} \times \frac{2}{3}$
+
+$= \frac{4 \times 64}{9 \times 1000} = \frac{256}{9000}$
+
+$P(E, \overline{D}, S, G, \overline{L}) = P(E)P(\overline{D})P(G|E, \overline{D})P(S, E)$
+
+P (L | E) = \frac{P (L , E)}{P (E)}</pre></div><div><h3>GLM direct</h3><p>11.17 s, request time</p><pre class="math">$P(E, \bar{D}, S, G, \bar{L})$
+$P(\bar{L} | E, \bar{D}, S, G) P(E, \bar{D}, S, G)$
+
+$= P(\bar{L} | G) P(E, \bar{D}, S, G)$
+
+$= P(\bar{L} | G) P(S | E, \bar{D}, G) P(E, \bar{D}, G)$
+
+$= P(\bar{L} | G) P(S | E) P(E, \bar{D}, G)$
+
+$= P(\bar{L} | G) P(S | E) P(G | E, \bar{D}) P(E, \bar{D})$
+
+$= P(\bar{L} | G) P(S | E) P(G | E, \bar{D}) P(E) P(\bar{D})$
+
+$= 0.1 \times 0.8 \times 0.8 \times 2/3 \times 2/3$
+
+$= \frac{1}{10} \times \frac{8}{10} \times \frac{8}{10} \times \frac{2}{3} \times \frac{2}{3}$
+
+$= \frac{4 \times 64}{9 \times 1000} = \frac{256}{9000}$
+
+$P(E, \bar{D}, S, G, \bar{L}) = P(E) P(\bar{D}) P(G | E, \bar{D}) P(S, E)$
+
+$P(\bar{L} | G)$
+
+$P(L | E) = \frac{P(L, E)}{P(E)}$
+
+$P(L, E) = P(L, E, D, S, G) + P(L, E, D, S, \bar{G})$</pre></div></div></section><section><h2>handwriting-6-2</h2><div class="cols" style="--n:3"><div><h3>Original</h3><img src="pages/handwriting-6-2.png" alt="Original handwriting-6-2"></div><div><h3>MiniCPM SDK</h3><p>5.31 s, process wall time</p><pre class="math">MARCH
+
+2025</pre><figure><img src="pages/handwriting-6-2-sdk-image-1.png" alt="Image retained by MiniCPM SDK"><figcaption>Original image region retained by SDK</figcaption></figure><figure><img src="pages/handwriting-6-2-sdk-image-2.png" alt="Image retained by MiniCPM SDK"><figcaption>Original image region retained by SDK</figcaption></figure><pre class="math">The max margin linear sep is the solution to the following opt problem
+
+min ||W|| s.t
+
+\[w \cdot x \geq 1 \text{ for all + instances}\]
+
+\[w \cdot x \leq -1 \text{ for all - instances}\]
+
+|w| inversely related to the width of the margin.</pre></div><div><h3>GLM direct</h3><p>5.11 s, request time</p><pre class="math">2w + b = -1
+3w + b = 1
+-W = -1 - 1
+-W = -2
+W = 2
+
+2(2) + b = -1
+b = -1 - 4
+b = -5
+
+$x_0, x_1, y$
+1 1 -1 $w_0, w_1$
+
+$w \cdot x + b = 0$
+$2x - 5 = 0$
+$x = \frac{5}{2} = 2.5$
+$x = 2.5$
+
+The max margin linear sep is the solution to the following opt problem
+min ||w|| s.t.
+$w \cdot x \ge 1$ for all instances
+$w \cdot x \le -1$ for all instances
+
+||w|| inversely related to the width of the margin.</pre></div></div></section><section><h2>handwriting-6-3</h2><div class="cols" style="--n:3"><div><h3>Original</h3><img src="pages/handwriting-6-3.png" alt="Original handwriting-6-3"></div><div><h3>MiniCPM SDK</h3><p>8.36 s, process wall time</p><pre class="math">Reinforcement Learning
+
+MARCH
+
+125 A policy is the strategy or brain
+
+of the reinforcement learning
+
+agent. It&#x27;s the set of rules the
+
+agent uses to decide what action
+
+take in a given state
+
+A deterministic policy
+
+$\pi(\text{state}) \to \text{action}$
+
+A stochastic policy
+
+$\pi(action | state) = probability$
+
+excellent for exploration
+
+The state-value function $(V_{s})$, tells you how good it is for the agent to be in a particular state.
+
+To get $V^{\pi}(s_{3})$, we need to calculate the Return, which is the total sum of all future rewards
+
+reward : The single, immediate feedback you get at a time step
+
+Return: The total sum of all future rewards.
+
+$G_{t} = R_{t+1} + R_{t+2} + R_{t+3}$ ...
+
+MAR</pre></div><div><h3>GLM direct</h3><p>5.10 s, request time</p><pre class="math">Reinforcement Learning
+
+A policy is the strategy or brain of the reinforcement learning agent. It&#x27;s the set of rules the agent uses to decide what action to take in a given state.
+
+A deterministic policy
+$$\pi(\text{state}) \rightarrow \text{action}$$
+
+A stochastic policy
+$$\pi(\text{action}|\text{state}) = \text{probability} \text{ excellent for exploration}$$
+
+The state-value function $V_s$ tells you how good it is for the agent to be in a particular state.
+
+To get $V^T(s_3)$, we need to calculate the return, which is the total sum of all future rewards.
+
+Reward: The single, immediate feedback you get at a time step
+
+Return: The total sum of all future rewards.
+
+$$G_t = R_{t+1} + R_{t+2} + R_{t+3}$$</pre></div></div></section><section><h2>handwriting-7-1</h2><div class="cols" style="--n:3"><div><h3>Original</h3><img src="pages/handwriting-7-1.png" alt="Original handwriting-7-1"></div><div><h3>MiniCPM SDK</h3><p>8.68 s, process wall time</p><pre class="math">Sketch of Algorithm Derivation
+
+1. The Goal: Maximum Likelihood Estimation
+
+Monday
+
+Find the weights (w) that make our training data the most likely or most probable outcome.
+
+2. The Likelihood Function:
+
+We need to write down the probability of our entire dataset. We start with one point $(x, y)$ and our model&#x27;s prediction, $\hat{y} = \sigma(w \cdot x)$
+
+The probability of seeing the correct label is $p(y|x) = (\hat{y})^{y} \cdot (1 - \hat{y})^{(1 - y)}$
+
+To get the probability of the entire dataset, we multiply the probabilities of each individual data points together.
+
+\[
+L(w)=\prod_{i=1}^{n}(\hat{y}_{i})^{y_{i}}.(1-\hat{y}_{i})^{(1-y_{i})}
+\]
+
+Our goal is to find the w that makes this function&#x27;s output as large as possible.</pre></div><div><h3>GLM direct</h3><p>9.41 s, request time</p><pre class="math">Sketch of Algorithm Derivation
+1. The Goal: Maximum Likelihood Estimation
+
+Find the weights $w$ that make our training data the most likely or most probable outcome.
+
+2. The Likelihood Function:
+
+We need to write down the probability of our entire dataset. We start with one point $(x, y)$ and our model&#x27;s prediction, $\hat{y} = \sigma(w \cdot x)$
+
+The probability of seeing the correct label is $P(y|x) = (\hat{y})^y \cdot (1 - \hat{y})^{1-y}$
+
+To get the probability of the entire dataset, we multiply the probabilities of each individual data points together.
+
+$$L(w) = \prod_{i=1}^{n} (\hat{y}_i)^y \cdot (1 - \hat{y}_i)^{1-y}$$
+
+Our goal is to find the $w$ that makes this function&#x27;s output as large as possible.</pre></div></div></section><section><h2>handwriting-7-2</h2><div class="cols" style="--n:3"><div><h3>Original</h3><img src="pages/handwriting-7-2.png" alt="Original handwriting-7-2"></div><div><h3>MiniCPM SDK</h3><p>5.87 s, process wall time</p><pre class="math">Sigmoid function MARCH
+
+squashes any Real number 2025
+
+into a (0,1) range to represent Week 59
+
+a probability.
+
+$$
+\sigma(z)=\frac{1}{1+e^{-z}}
+$$
+
+Objective Function:
+
+To minimize the Log Loss across all training examples.
+
+\[
+\begin{array}{l} \text{Loss} = - [ y \log (\hat{y}) + (1 - y) \log (1 - \hat{y}) ] \\ y \to \text{True Label} \\ \hat{y} \to \text{Model&#x27;s predicted probability} \end{array}
+\]
+
+2
+
+Sunday
+
+&quot;Our greatest weakness lies in giving up. The most certain way to succeed is always to try just one more time.&quot;</pre></div><div><h3>GLM direct</h3><p>9.67 s, request time</p><pre class="math">Sigmoid Function
+squashes any Real number
+into a (0,1) range to represent
+a probability.
+
+$$\sigma(z) = \frac{1}{1 + e^{-z}}$$
+
+Objective Function:
+To minimize the Log Loss across all
+training examples.
+
+$$\text{Loss} = -[y \log(y^2) + (1-y) \log(1-y)]$$
+
+$$y \rightarrow \text{True Label}$$
+$$\hat{y} \rightarrow \text{Model&#x27;s predicted probability}$$
+
+2
+Sunday
+061-304
+
+&quot;Our greatest weakness lies in giving up. The most certain way to succeed is always to try just one more time.&quot;</pre></div></div></section><script>window.addEventListener('DOMContentLoaded',()=>document.querySelectorAll('.math').forEach(el=>renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}],throwOnError:false,trust:false})));</script></html>
