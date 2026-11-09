@@ -15,6 +15,37 @@ private struct FixedRecognizer: PageRecognizing {
 
 final class DocumentTests: XCTestCase {
     @MainActor
+    func testReplaceSelectionWithCropAndUndo() throws {
+        _ = NSApplication.shared
+        let image = NSImage(size: NSSize(width: 100, height: 100))
+        image.lockFocus(); NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 100, height: 100).fill(); image.unlockFocus()
+        let document = PDFDocument(); document.insert(try XCTUnwrap(PDFPage(image: image)), at: 0)
+        let workspace = Workspace(); workspace.document = document; workspace.pages = [DraftPage()]
+        let original = "Before 😀 $x^2$ after"
+        workspace.pages[0].text = original
+        workspace.draftSelection = (original as NSString).range(of: "$x^2$")
+        workspace.selection = CGRect(x: 0.1, y: 0.1, width: 0.5, height: 0.5)
+        workspace.addSelection(replaceDraft: true)
+        let figure = try XCTUnwrap(workspace.pages[0].figures.first)
+        XCTAssertEqual(workspace.pages[0].text, "Before 😀 \(figure.marker) after")
+        XCTAssertNoThrow(try DocumentHTML.validate(workspace.pages[0]))
+        workspace.undoReplacement()
+        XCTAssertEqual(workspace.pages[0].text, original)
+        XCTAssertTrue(workspace.pages[0].figures.isEmpty)
+    }
+
+    @MainActor
+    func testBatchOnlyEnablesEditingOnProcessedPages() {
+        let workspace = Workspace(); workspace.pages = [DraftPage(), DraftPage(), DraftPage()]
+        workspace.processing = true; workspace.batchIndex = 1
+        workspace.selectedPage = 0; XCTAssertTrue(workspace.canEditSelectedPage)
+        workspace.selectedPage = 1; XCTAssertFalse(workspace.canEditSelectedPage)
+        workspace.selectedPage = 2; XCTAssertFalse(workspace.canEditSelectedPage)
+        workspace.processing = false; workspace.batchIndex = nil
+        XCTAssertTrue(workspace.canEditSelectedPage)
+    }
+
+    @MainActor
     func testRecognitionDownsamplePreservesAspectRatioAndDoesNotUpscale() throws {
         let context = try XCTUnwrap(CGContext(data: nil, width: 2200, height: 1000, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         let image = try XCTUnwrap(context.makeImage())

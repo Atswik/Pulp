@@ -50,18 +50,21 @@ final class CropCanvas: NSView {
 struct DraftEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var insertMarker: String?
+    @Binding var selectedRange: NSRange?
     var markerPageID: UUID?
     var pageID: UUID
+    var editable: Bool
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.borderType = .bezelBorder
         let view = NSTextView(); view.isRichText = false; view.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        view.isVerticallyResizable = true; view.autoresizingMask = [.width]; view.delegate = context.coordinator
+        view.isVerticallyResizable = true; view.autoresizingMask = [.width]; view.delegate = context.coordinator; view.allowsUndo = true
         scroll.documentView = view; return scroll
     }
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? NSTextView else { return }
         context.coordinator.parent = self
+        view.isEditable = editable
         if view.string != text { view.string = text }
         if let marker = insertMarker, markerPageID == pageID, context.coordinator.lastMarker != marker {
             context.coordinator.lastMarker = marker
@@ -77,7 +80,12 @@ struct DraftEditor: NSViewRepresentable {
         var lastMarker: String?
         init(_ parent: DraftEditor) { self.parent = parent }
         func textDidChange(_ notification: Notification) {
-            if let view = notification.object as? NSTextView { parent.text = view.string }
+            if let view = notification.object as? NSTextView { parent.text = view.string; parent.selectedRange = nil }
+        }
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            let range = view.selectedRange()
+            parent.selectedRange = range.length > 0 ? range : nil
         }
     }
 }
@@ -158,13 +166,20 @@ struct ContentView: View {
                 if model.busy { ProgressView(value: model.progress).frame(width: 150) }
                 Spacer(); Text(workspace.message).font(.caption)
             }
+            if let index = workspace.batchIndex {
+                HStack {
+                    Text("Recognizing page \(index + 1) of \(workspace.pages.count)")
+                    ProgressView(value: Double(workspace.batchCompleted), total: Double(workspace.pages.count)).frame(width: 150)
+                    Text("\(workspace.batchCompleted) of \(workspace.pages.count) pages processed").foregroundStyle(.secondary)
+                }.font(.caption)
+            }
             if workspace.pages.isEmpty {
                 ContentUnavailableView("Open handwritten notes", systemImage: "doc.text", description: Text("Opening a PDF starts recognition. First use downloads an OCR model (about 2.2 GB). Recognition and export run on your Mac."))
             } else {
                 HStack {
-                    Button("Previous") { workspace.selectedPage -= 1; workspace.selection = nil }.disabled(workspace.selectedPage == 0 || workspace.processing)
+                    Button("Previous") { workspace.selectedPage -= 1; workspace.selection = nil; workspace.draftSelection = nil }.disabled(workspace.selectedPage == 0 || (workspace.processing && workspace.batchIndex == nil))
                     Text("Page \(workspace.selectedPage + 1) of \(workspace.pages.count)")
-                    Button("Next") { workspace.selectedPage += 1; workspace.selection = nil }.disabled(workspace.selectedPage + 1 >= workspace.pages.count || workspace.processing)
+                    Button("Next") { workspace.selectedPage += 1; workspace.selection = nil; workspace.draftSelection = nil }.disabled(workspace.selectedPage + 1 >= workspace.pages.count || (workspace.processing && workspace.batchIndex == nil))
                     Button("Retry Page") { Task { await workspace.recognize(workspace.selectedPage) } }.disabled(workspace.processing)
                     if workspace.pages[workspace.selectedPage].previousCorrection != nil {
                         Button("Compare Recognition") { workspace.compareEarlierDraft() }.disabled(workspace.processing)
@@ -172,7 +187,11 @@ struct ContentView: View {
                     }
                     Text(workspace.pages[workspace.selectedPage].status).font(.caption)
                     Spacer()
-                    Button("Add Selected Figure") { workspace.addSelection() }.disabled(workspace.selection == nil || workspace.processing)
+                    Button("Add Selected Figure") { workspace.addSelection() }.disabled(workspace.selection == nil || !workspace.canEditSelectedPage)
+                    Button("Replace with Original") { workspace.addSelection(replaceDraft: true) }.disabled(workspace.selection == nil || workspace.draftSelection == nil || !workspace.canEditSelectedPage)
+                    if let undo = workspace.replacementUndo, workspace.pages[workspace.selectedPage].id == undo.pageID, workspace.pages[workspace.selectedPage].text == undo.after {
+                        Button("Undo Replacement") { workspace.undoReplacement() }.disabled(!workspace.canEditSelectedPage)
+                    }
                 }
                 if workspace.pages[workspace.selectedPage].status.hasPrefix("Possible repeated paragraphs") {
                     Text(workspace.pages[workspace.selectedPage].status).foregroundStyle(.orange)
@@ -185,7 +204,8 @@ struct ContentView: View {
                     VSplitView {
                         VStack(alignment: .leading) {
                             Text("Edit text and LaTeX").font(.headline)
-                            DraftEditor(text: draftBinding(index: workspace.selectedPage), insertMarker: $workspace.markerToInsert, markerPageID: workspace.markerPageID, pageID: workspace.pages[workspace.selectedPage].id).id(workspace.selectedPage)
+                            if !workspace.canEditSelectedPage { Text("This page can be edited after recognition finishes.").font(.caption).foregroundStyle(.secondary) }
+                            DraftEditor(text: draftBinding(index: workspace.selectedPage), insertMarker: $workspace.markerToInsert, selectedRange: $workspace.draftSelection, markerPageID: workspace.markerPageID, pageID: workspace.pages[workspace.selectedPage].id, editable: workspace.canEditSelectedPage).id(workspace.selectedPage)
                         }.frame(minHeight: 160)
                         VStack(alignment: .leading) {
                             Text("Rendered preview").font(.headline)

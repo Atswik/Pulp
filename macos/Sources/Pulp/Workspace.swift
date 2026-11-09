@@ -12,6 +12,10 @@ final class Workspace: ObservableObject {
     @Published var markerToInsert: String?
     @Published var markerPageID: UUID?
     @Published var processing = false
+    @Published var batchIndex: Int?
+    @Published var batchCompleted = 0
+    @Published var draftSelection: NSRange?
+    @Published var replacementUndo: (pageID: UUID, before: String, after: String, figureID: UUID)?
     @Published var message = "Open a PDF to begin."
     @Published var dirty = false
     @Published var mathError = ""
@@ -26,7 +30,7 @@ final class Workspace: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         guard let doc = PDFDocument(url: url), !doc.isLocked, doc.pageCount > 0 else { message = "Could not open this PDF. It may be locked or damaged."; return false }
         document = doc; pages = (0..<doc.pageCount).map { _ in DraftPage() }
-        selectedPage = 0; selection = nil; markerToInsert = nil; markerPageID = nil; dirty = false; message = "Ready: \(doc.pageCount) page(s)."
+        selectedPage = 0; selection = nil; draftSelection = nil; replacementUndo = nil; markerToInsert = nil; markerPageID = nil; dirty = false; message = "Ready: \(doc.pageCount) page(s)."
         return true
     }
 
@@ -164,22 +168,64 @@ final class Workspace: ObservableObject {
 
     func recognizeAll() async {
         guard !processing else { return }
-        processing = true; defer { processing = false }
+        processing = true; batchCompleted = 0; batchIndex = 0
+        defer { processing = false; batchIndex = nil }
         for index in pages.indices {
+            batchIndex = index
             // Preserve any existing edits and drafts; retry is an explicit page action.
             if pages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { await recognizePreparedPage(index) }
+            else { pages[index].status = "Existing draft kept. Review it for errors." }
+            batchCompleted = index + 1
         }
     }
 
-    func addSelection() {
-        guard pages.indices.contains(selectedPage), let rect = selection, let image = image(for: selectedPage) else { return }
+    var canEditSelectedPage: Bool {
+        !processing || (batchIndex.map { selectedPage < $0 } ?? false)
+    }
+
+    func addSelection(replaceDraft: Bool = false) {
+        guard canEditSelectedPage, pages.indices.contains(selectedPage), let rect = selection, let image = image(for: selectedPage) else { return }
+        let page = pages[selectedPage]
+        var replacement: Range<String.Index>?
+        if replaceDraft {
+            guard let selected = draftSelection, selected.length > 0, let range = Range(selected, in: page.text) else {
+                message = "Select text in the draft, then select its region on the original page."; return
+            }
+            let fullText = page.text as NSString
+            guard !page.figures.contains(where: {
+                let markerRange = fullText.range(of: $0.marker)
+                return markerRange.location != NSNotFound && NSIntersectionRange(selected, markerRange).length > 0
+            }) else {
+                message = "Select text without an existing figure marker."; return
+            }
+            replacement = range
+        }
         let pixel = CGRect(x: rect.minX * CGFloat(image.width), y: rect.minY * CGFloat(image.height), width: rect.width * CGFloat(image.width), height: rect.height * CGFloat(image.height)).integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
         guard pixel.width >= 3, pixel.height >= 3, let crop = image.cropping(to: pixel) else { message = "Select a larger region."; return }
         let bitmap = NSBitmapImageRep(cgImage: crop)
         guard let png = bitmap.representation(using: .png, properties: [:]) else { message = "Could not create the crop."; return }
         let figure = Figure(id: UUID(), png: png); pages[selectedPage].figures.append(figure)
-        markerPageID = pages[selectedPage].id; markerToInsert = figure.marker; selection = nil; dirty = true
-        message = "Figure added at the editing cursor. Move its marker to change its position."
+        if let replacement {
+            let before = page.text
+            let after = before.replacingCharacters(in: replacement, with: figure.marker)
+            pages[selectedPage].text = after; pages[selectedPage].revision += 1
+            replacementUndo = (page.id, before, after, figure.id)
+            draftSelection = nil
+            message = "Selected text replaced with the original crop."
+        } else {
+            markerPageID = page.id; markerToInsert = figure.marker
+            message = "Figure added at the editing cursor. Move its marker to change its position."
+        }
+        selection = nil; dirty = true
+    }
+
+    func undoReplacement() {
+        guard canEditSelectedPage, let undo = replacementUndo, pages.indices.contains(selectedPage), pages[selectedPage].id == undo.pageID,
+              pages[selectedPage].text == undo.after else { return }
+        pages[selectedPage].text = undo.before; pages[selectedPage].revision += 1
+        pages[selectedPage].figures.removeAll { $0.id == undo.figureID }
+        replacementUndo = nil; draftSelection = nil; dirty = true
+        message = "Replacement undone."
     }
 
     func proposeCorrection() async {
