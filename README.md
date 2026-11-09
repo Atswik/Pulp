@@ -1,4 +1,4 @@
-# Pulp - Handwriting to PDF
+# Pulp - Handwriting to Typeset PDF
 
 Pulp is a native macOS app that turns your handwritten notes into typeset PDFs you can select and search. It uses GLM-OCR to recognize your notes on your Mac. Review the result beside the original, keep your diagrams, and export a new PDF.
 
