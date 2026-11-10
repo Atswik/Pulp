@@ -14,12 +14,15 @@ final class Workspace: ObservableObject {
     @Published var processing = false
     @Published var batchIndex: Int?
     @Published var batchCompleted = 0
+    @Published var stopRequested = false
+    @Published var showRemaining = false
     @Published var draftSelection: NSRange?
     @Published var replacementUndo: (pageID: UUID, before: String, after: String, figureID: UUID)?
     @Published var message = "Open a PDF to begin."
     @Published var dirty = false
     @Published var mathError = ""
     @Published var correctionProposal: CorrectionProposal?
+    @Published var projectURL: URL?
     private var runningTimings: [UUID: PageTimings] = [:]
     let model = ModelStore()
     let correctionModel = CorrectionModelStore()
@@ -30,15 +33,50 @@ final class Workspace: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         guard let doc = PDFDocument(url: url), !doc.isLocked, doc.pageCount > 0 else { message = "Could not open this PDF. It may be locked or damaged."; return false }
         document = doc; pages = (0..<doc.pageCount).map { _ in DraftPage() }
-        selectedPage = 0; selection = nil; draftSelection = nil; replacementUndo = nil; markerToInsert = nil; markerPageID = nil; dirty = false; message = "Ready: \(doc.pageCount) page(s)."
+        selectedPage = 0; selection = nil; draftSelection = nil; replacementUndo = nil; markerToInsert = nil; markerPageID = nil; projectURL = nil; showRemaining = false; dirty = true; message = "Ready: \(doc.pageCount) page(s)."
         return true
     }
 
     func confirmDiscard() -> Bool {
         guard dirty else { return true }
-        let alert = NSAlert(); alert.messageText = "Discard unexported changes?"; alert.informativeText = "Your corrections are kept only for this session until you export."
+        let alert = NSAlert(); alert.messageText = "Discard unsaved project changes?"; alert.informativeText = "Save the project to continue reviewing it later. Exporting a PDF does not save the project."
         alert.addButton(withTitle: "Discard"); alert.addButton(withTitle: "Keep Editing")
         return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    func saveProject(asNew: Bool = false) {
+        guard let document, let pdf = document.dataRepresentation() else { message = "Could not read the original PDF."; return }
+        var destination = asNew ? nil : projectURL
+        if destination == nil {
+            let panel = NSSavePanel(); panel.nameFieldStringValue = "Notes.pulp"
+            guard panel.runModal() == .OK, var url = panel.url else { return }
+            if url.pathExtension.lowercased() != "pulp" { url.appendPathExtension("pulp") }
+            destination = url
+        }
+        guard let destination else { return }
+        let snapshot = ProjectFile(pdf: pdf, pages: pages.map { page in
+            let status = ["Converting…", "Recognizing…", "Preparing model…", "Refining recognition…"].contains(page.status) ? "Not converted" : page.status
+            return ProjectFile.Page(text: page.text, figures: page.figures, status: status)
+        }, selectedPage: selectedPage)
+        do {
+            try snapshot.write(to: destination)
+            projectURL = destination; dirty = false; message = "Project saved: \(destination.lastPathComponent)"
+        } catch { showExportMessage(title: "Project was not saved", detail: error.localizedDescription); message = "Project save failed." }
+    }
+
+    func openProject() {
+        guard confirmDiscard() else { return }
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.data]; panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let project = try ProjectFile.read(from: url)
+            let restored = try project.validatedDocument()
+            document = restored
+            pages = project.pages.map { saved in var page = DraftPage(); page.text = saved.text; page.figures = saved.figures; page.status = saved.status == "Not recognized" ? "Not converted" : saved.status; return page }
+            selectedPage = project.selectedPage; selection = nil; draftSelection = nil; replacementUndo = nil
+            markerToInsert = nil; markerPageID = nil; correctionProposal = nil; mathError = ""
+            projectURL = url; showRemaining = true; dirty = false; message = "Project opened: \(url.lastPathComponent)"
+        } catch { showExportMessage(title: "Project could not be opened", detail: error.localizedDescription); message = "Project open failed." }
     }
 
     func image(for index: Int) -> CGImage? {
@@ -91,7 +129,7 @@ final class Workspace: ObservableObject {
                           refine: (@MainActor (CGImage, DraftPage) async throws -> String)? = nil) async {
         guard pages.indices.contains(index) else { return }
         let pageID = pages[index].id; let revision = pages[index].revision
-        pages[index].status = "Recognizing…"
+        pages[index].status = "Converting…"
         let recognitionStart = ContinuousClock.now
         do {
             let result = try await recognizer.recognize(image: image)
@@ -168,15 +206,22 @@ final class Workspace: ObservableObject {
 
     func recognizeAll() async {
         guard !processing else { return }
-        processing = true; batchCompleted = 0; batchIndex = 0
-        defer { processing = false; batchIndex = nil }
+        processing = true; batchCompleted = 0; batchIndex = 0; stopRequested = false; showRemaining = false
         for index in pages.indices {
             batchIndex = index
             // Preserve any existing edits and drafts; retry is an explicit page action.
             if pages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { await recognizePreparedPage(index) }
             else { pages[index].status = "Existing draft kept. Review it for errors." }
+            dirty = true
             batchCompleted = index + 1
+            if stopRequested { break }
         }
+        processing = false; batchIndex = nil
+        if stopRequested {
+            stopRequested = false; showRemaining = true
+            message = "Conversion stopped. Save the project or convert the remaining pages."
+            saveProject()
+        } else { showRemaining = true }
     }
 
     var canEditSelectedPage: Bool {
@@ -321,7 +366,7 @@ final class Workspace: ObservableObject {
             guard panel.runModal() == .OK, let url = panel.url else { return }
             try data.write(to: url, options: .atomic)
             guard let pdf = PDFDocument(url: url), pdf.pageCount > 0 else { throw ExportError.failed }
-            dirty = false; message = "Exported and reopened: \(url.lastPathComponent)"
+            message = "Exported and reopened: \(url.lastPathComponent)"
             showExportMessage(title: "PDF exported", detail: "Saved and reopened: \(url.path)")
         } catch {
             if let pageError = error as? PageExportError { selectedPage = pageError.index; selection = nil }

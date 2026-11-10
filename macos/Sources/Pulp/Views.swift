@@ -152,7 +152,12 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Button("Open PDF") { if workspace.open() { Task { await workspace.recognizeAll() } } }.disabled(workspace.processing)
-                Button("Recognize Remaining") { Task { await workspace.recognizeAll() } }.disabled(workspace.pages.isEmpty || workspace.processing)
+                Button("Open Project") { workspace.openProject() }.disabled(workspace.processing)
+                Button("Save Project") { workspace.saveProject() }.disabled(workspace.document == nil || workspace.processing)
+                Button("Save Project As…") { workspace.saveProject(asNew: true) }.disabled(workspace.document == nil || workspace.processing)
+                if workspace.batchIndex != nil {
+                    Button("Stop & Save Project") { workspace.stopRequested = true }.disabled(workspace.stopRequested)
+                }
                 Button("Export PDF") { Task { await workspace.export() } }.disabled(workspace.pages.isEmpty || workspace.processing)
                 Spacer()
                 if !model.ready {
@@ -168,18 +173,26 @@ struct ContentView: View {
             }
             if let index = workspace.batchIndex {
                 HStack {
-                    Text("Recognizing page \(index + 1) of \(workspace.pages.count)")
+                    Text(workspace.stopRequested ? "Finishing page \(index + 1) before stopping…" : "Converting page \(index + 1) of \(workspace.pages.count)")
                     ProgressView(value: Double(workspace.batchCompleted), total: Double(workspace.pages.count)).frame(width: 150)
-                    Text("\(workspace.batchCompleted) of \(workspace.pages.count) pages processed").foregroundStyle(.secondary)
+                }.font(.caption)
+            }
+            if workspace.showRemaining && !workspace.processing && workspace.pages.contains(where: { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+                HStack {
+                    let converted = workspace.pages.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+                    Text("\(converted) of \(workspace.pages.count) pages converted")
+                    ProgressView(value: Double(converted), total: Double(workspace.pages.count)).frame(width: 150)
+                    Text("Some pages still need to be converted.").foregroundStyle(.secondary)
+                    Button("Convert Remaining Pages") { Task { await workspace.recognizeAll() } }
                 }.font(.caption)
             }
             if workspace.pages.isEmpty {
                 ContentUnavailableView("Open handwritten notes", systemImage: "doc.text", description: Text("Opening a PDF starts recognition. First use downloads an OCR model (about 2.2 GB). Recognition and export run on your Mac."))
             } else {
                 HStack {
-                    Button("Previous") { workspace.selectedPage -= 1; workspace.selection = nil; workspace.draftSelection = nil }.disabled(workspace.selectedPage == 0 || (workspace.processing && workspace.batchIndex == nil))
+                    Button("Previous") { workspace.selectedPage -= 1; workspace.selection = nil; workspace.draftSelection = nil; workspace.dirty = true }.disabled(workspace.selectedPage == 0 || (workspace.processing && workspace.batchIndex == nil))
                     Text("Page \(workspace.selectedPage + 1) of \(workspace.pages.count)")
-                    Button("Next") { workspace.selectedPage += 1; workspace.selection = nil; workspace.draftSelection = nil }.disabled(workspace.selectedPage + 1 >= workspace.pages.count || (workspace.processing && workspace.batchIndex == nil))
+                    Button("Next") { workspace.selectedPage += 1; workspace.selection = nil; workspace.draftSelection = nil; workspace.dirty = true }.disabled(workspace.selectedPage + 1 >= workspace.pages.count || (workspace.processing && workspace.batchIndex == nil))
                     Button("Retry Page") { Task { await workspace.recognize(workspace.selectedPage) } }.disabled(workspace.processing)
                     if workspace.pages[workspace.selectedPage].previousCorrection != nil {
                         Button("Compare Recognition") { workspace.compareEarlierDraft() }.disabled(workspace.processing)
@@ -204,7 +217,7 @@ struct ContentView: View {
                     VSplitView {
                         VStack(alignment: .leading) {
                             Text("Edit text and LaTeX").font(.headline)
-                            if !workspace.canEditSelectedPage { Text("This page can be edited after recognition finishes.").font(.caption).foregroundStyle(.secondary) }
+                            if !workspace.canEditSelectedPage { Text("This page can be edited after conversion finishes.").font(.caption).foregroundStyle(.secondary) }
                             DraftEditor(text: draftBinding(index: workspace.selectedPage), insertMarker: $workspace.markerToInsert, selectedRange: $workspace.draftSelection, markerPageID: workspace.markerPageID, pageID: workspace.pages[workspace.selectedPage].id, editable: workspace.canEditSelectedPage).id(workspace.selectedPage)
                         }.frame(minHeight: 160)
                         VStack(alignment: .leading) {

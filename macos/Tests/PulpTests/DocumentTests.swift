@@ -14,6 +14,25 @@ private struct FixedRecognizer: PageRecognizing {
 }
 
 final class DocumentTests: XCTestCase {
+    func testProjectFileRoundTripAndInvalidFile() throws {
+        let image = NSImage(size: NSSize(width: 40, height: 40))
+        image.lockFocus(); NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 40, height: 40).fill(); image.unlockFocus()
+        let pdf = PDFDocument(); pdf.insert(try XCTUnwrap(PDFPage(image: image)), at: 0)
+        let figure = Figure(id: UUID(), png: Data([1, 2, 3]))
+        let page = ProjectFile.Page(text: "Corrected $x^2$ \(figure.marker)", figures: [figure], status: "Review the draft for errors.")
+        let project = ProjectFile(pdf: try XCTUnwrap(pdf.dataRepresentation()), pages: [page], selectedPage: 0)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pulp")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try project.write(to: url)
+        let restored = try ProjectFile.read(from: url)
+        XCTAssertEqual(restored.pages[0].text, page.text)
+        XCTAssertEqual(restored.pages[0].figures, [figure])
+        XCTAssertEqual(restored.pages[0].status, page.status)
+        XCTAssertEqual(try restored.validatedDocument().pageCount, 1)
+        try Data("invalid".utf8).write(to: url)
+        XCTAssertThrowsError(try ProjectFile.read(from: url))
+    }
+
     @MainActor
     func testReplaceSelectionWithCropAndUndo() throws {
         _ = NSApplication.shared

@@ -19,18 +19,20 @@ Pulp is a native macOS app that turns your handwritten notes into typeset PDFs y
 
 The original PDF is not modified. The larger page image remains available for preview and figure crops. The OCR engine sits behind an interface so other recognizers can be evaluated later.
 
-The editor exposes LaTeX for math, and figures are selected manually. Cropped figures and equations are images. Equations rendered from LaTeX are visible, but their text selection and extraction may be incomplete. Edits are kept for the open session, so export before closing. The initial scope is small, single-column English notes.
+The editor exposes LaTeX for math, and figures are selected manually. Cropped figures and equations are images. Equations rendered from LaTeX are visible, but their text selection and extraction may be incomplete. The initial scope is small, single-column English notes.
+
+Choose **Save Project** to save the original PDF, drafts, crops, and current page in a self-contained `.pulp` file. Choose **Open Project** to continue reviewing it later. Exporting a PDF is separate and does not save the project.
 
 ## Evaluation
 
 These existing visual reports show the decisions behind the current pipeline:
 
-- [GLM and MiniCPM page recognition with Qwen formula detection](docs/reports/models/workflow-report.html) shows GLM whole-page recognition, MiniCPM's layout and recognition workflow, and Qwen's formula proposals on the same pages. Qwen's proposals are not a complete page pipeline.
-- [GLM vs. MiniCPM: five-page recognition and timing comparison](docs/reports/models/fresh-comparison.html) compares their output on five pages and includes per-page timings. The timings measure different operations, so they are not a controlled speed comparison.
-- [Resolution comparison](docs/reports/resolution/index.html) compares 2200 and 1100 pixels on 13 pages. The test used one run per size, pages from one writer, and a different downsampling implementation from the app's native filter.
-- [Combined-document run](docs/reports/combined/index.html) shows the current native 1100-pixel pipeline on 12 pages. Its earlier 2200-pixel run used different conditions, which limits the timing comparison.
+- [GLM and MiniCPM page recognition with Qwen formula detection](docs/reports/models/workflow-report.md) shows GLM whole-page recognition, MiniCPM's layout and recognition workflow, and Qwen's formula proposals on the same pages. Qwen's proposals are not a complete page pipeline.
+- [GLM vs. MiniCPM: five-page recognition and timing comparison](docs/reports/models/fresh-comparison.md) compares their output on five pages and includes per-page timings. The timings measure different operations, so they are not a controlled speed comparison.
+- [Resolution comparison](docs/reports/resolution/README.md) compares 2200 and 1100 pixels on 13 pages. The test used one run per size, pages from one writer, and a different downsampling implementation from the app's native filter.
+- [Combined-document run](docs/reports/combined/README.md) shows the current native 1100-pixel pipeline on 12 pages. Its earlier 2200-pixel run used different conditions, which limits the timing comparison.
 
-The reports include handwritten page images, references, and raw model output. Some references were generated after earlier model output was seen. These small samples do not establish accuracy across all handwriting. GitHub shows HTML files as source; clone the repository and open the reports locally to see their visual layouts.
+The reports include handwritten page images, references, and raw model output. Some references were generated after earlier model output was seen. These small samples do not establish accuracy across all handwriting. Each report links to its original HTML version, which you can open locally for a side-by-side layout.
 
 ## Getting started
 
@@ -44,7 +46,7 @@ From the project folder, run:
 
 The script builds and opens the app. If the Metal toolchain is missing, install it with `xcodebuild -downloadComponent MetalToolchain`. This is a developer-run build; it is not signed for distribution or notarized.
 
-Open a PDF to start recognition. If model setup fails, resolve the issue and use **Recognize Remaining** or **Retry Page**. You can remove the downloaded model with **Remove Model** in the app.
+Open a PDF to start conversion. If model setup fails, resolve the issue and use **Convert Remaining Pages** or **Retry Page**. You can remove the downloaded model with **Remove Model** in the app.
 
 ## Tech stack
 

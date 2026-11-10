@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-struct Figure: Identifiable, Equatable {
+struct Figure: Identifiable, Equatable, Codable {
     let id: UUID
     let png: Data
     var marker: String { "[[figure:\(id.uuidString)]]" }
@@ -11,7 +11,7 @@ struct DraftPage: Identifiable {
     let id = UUID()
     var text = ""
     var figures: [Figure] = []
-    var status = "Not recognized"
+    var status = "Not converted"
     var revision = 0
     var timings = PageTimings()
     var previousCorrection: (before: String, after: String)?
