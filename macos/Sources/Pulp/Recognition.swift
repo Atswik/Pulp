@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import GlmOCRSwift
+import MLX
 
 protocol PageRecognizing: Sendable {
     func recognize(image: CGImage) async throws -> String
@@ -63,7 +64,10 @@ final class ModelStore: ObservableObject {
     private(set) var recognizer: GLMRecognizer?
     private let cacheDirectory: URL?
 
-    init(cacheDirectory: URL? = nil) { self.cacheDirectory = cacheDirectory }
+    init(cacheDirectory: URL? = nil) {
+        self.cacheDirectory = cacheDirectory
+        if hasDownloadedFiles { status = "Model on disk; loads when needed" }
+    }
 
     private let files: [(String, String)] = [
         ("chat_template.jinja", "062e7ee4cc8defa88a5938b5d456dc60366ffd80647f918946ee747bf09ddc7c"),
@@ -79,6 +83,18 @@ final class ModelStore: ObservableObject {
     private var directory: URL {
         cacheDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Pulp/Models/GLM-OCR", isDirectory: true)
+    }
+
+    var hasDownloadedFiles: Bool {
+        let url = ProcessInfo.processInfo.environment["NOTES_MODEL_DIR"].map { URL(fileURLWithPath: $0) } ?? directory
+        return files.allSatisfy { FileManager.default.fileExists(atPath: url.appendingPathComponent($0.0).path) }
+    }
+
+    func unload() {
+        guard !busy, recognizer != nil else { return }
+        recognizer = nil; ready = false; progress = 0
+        Memory.clearCache()
+        status = "Model on disk; loads when needed"
     }
 
     func prepare() async {

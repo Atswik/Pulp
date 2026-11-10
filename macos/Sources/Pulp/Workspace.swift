@@ -24,6 +24,7 @@ final class Workspace: ObservableObject {
     @Published var correctionProposal: CorrectionProposal?
     @Published var projectURL: URL?
     private var runningTimings: [UUID: PageTimings] = [:]
+    private var idleUnloadTask: Task<Void, Never>?
     let model = ModelStore()
     let correctionModel = CorrectionModelStore()
 
@@ -98,7 +99,8 @@ final class Workspace: ObservableObject {
             alert.addButton(withTitle: "Replace Draft"); alert.addButton(withTitle: "Keep Editing")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
-        processing = true; defer { processing = false }
+        idleUnloadTask?.cancel()
+        processing = true; defer { processing = false; scheduleIdleUnload() }
         await recognizePreparedPage(index)
     }
 
@@ -206,6 +208,7 @@ final class Workspace: ObservableObject {
 
     func recognizeAll() async {
         guard !processing else { return }
+        idleUnloadTask?.cancel()
         processing = true; batchCompleted = 0; batchIndex = 0; stopRequested = false; showRemaining = false
         for index in pages.indices {
             batchIndex = index
@@ -217,11 +220,29 @@ final class Workspace: ObservableObject {
             if stopRequested { break }
         }
         processing = false; batchIndex = nil
+        scheduleIdleUnload()
         if stopRequested {
             stopRequested = false; showRemaining = true
             message = "Conversion stopped. Save the project or convert the remaining pages."
             saveProject()
         } else { showRemaining = true }
+    }
+
+    private func scheduleIdleUnload() {
+        idleUnloadTask?.cancel()
+        idleUnloadTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(300)) } catch { return }
+                guard let self else { return }
+                if !self.processing && !self.model.busy { self.model.unload(); return }
+            }
+        }
+    }
+
+    func prepareModel() async {
+        idleUnloadTask?.cancel()
+        await model.prepare()
+        scheduleIdleUnload()
     }
 
     var canEditSelectedPage: Bool {
