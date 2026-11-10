@@ -3,6 +3,50 @@ import PDFKit
 import SwiftUI
 import WebKit
 
+// MARK: - Shared chrome
+
+/// One hairline-bordered, softly rounded surface used by every content pane,
+/// so the page image, the editor and the previews all share the same edge.
+private extension View {
+    func paneSurface() -> some View {
+        clipShape(.rect(cornerRadius: 6))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.separator)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
+/// Title row for a pane. Actions on the right are icon-only and borderless
+/// (their Labels still drive VoiceOver and, with `.help`, tooltips).
+struct PaneHeader<Trailing: View>: View {
+    let title: String
+    let trailing: Trailing
+
+    init(_ title: String, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title).font(.subheadline.weight(.semibold))
+            Spacer(minLength: 8)
+            HStack(spacing: 2) { trailing }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+        }
+    }
+}
+
+extension PaneHeader where Trailing == EmptyView {
+    init(_ title: String) { self.init(title) { EmptyView() } }
+}
+
+// MARK: - AppKit-backed views
+
 struct PageImageView: NSViewRepresentable {
     var image: CGImage?
     @Binding var selection: CGRect?
@@ -31,8 +75,9 @@ final class CropCanvas: NSView {
         NSImage(cgImage: image, size: imageRect.size).draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         if let selection {
             let rect = CGRect(x: imageRect.minX + selection.minX * imageRect.width, y: imageRect.minY + selection.minY * imageRect.height, width: selection.width * imageRect.width, height: selection.height * imageRect.height)
-            NSColor.systemBlue.withAlphaComponent(0.15).setFill(); rect.fill()
-            NSColor.systemBlue.setStroke(); let path = NSBezierPath(rect: rect); path.lineWidth = 2; path.stroke()
+            // Follows the user's system accent color instead of a fixed blue.
+            NSColor.controlAccentColor.withAlphaComponent(0.15).setFill(); rect.fill()
+            NSColor.controlAccentColor.setStroke(); let path = NSBezierPath(rect: rect); path.lineWidth = 2; path.stroke()
         }
     }
     override func mouseDown(with event: NSEvent) { start = convert(event.locationInWindow, from: nil); update(event) }
@@ -56,8 +101,10 @@ struct DraftEditor: NSViewRepresentable {
     var editable: Bool
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.borderType = .bezelBorder
+        // The border now comes from `paneSurface()` so all panes match.
+        let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.borderType = .noBorder
         let view = NSTextView(); view.isRichText = false; view.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        view.textContainerInset = NSSize(width: 6, height: 8)
         view.isVerticallyResizable = true; view.autoresizingMask = [.width]; view.delegate = context.coordinator; view.allowsUndo = true
         scroll.documentView = view; return scroll
     }
@@ -137,10 +184,13 @@ struct DraftPreview: NSViewRepresentable {
     }
 }
 
+// MARK: - Main window
+
 struct ContentView: View {
     @ObservedObject var workspace: Workspace
     @ObservedObject var model: ModelStore
     init(workspace: Workspace) { self.workspace = workspace; self.model = workspace.model }
+
     private func draftBinding(index: Int) -> Binding<String> {
         let pageID = workspace.pages[index].id
         return Binding(get: { workspace.pages.indices.contains(index) && workspace.pages[index].id == pageID ? workspace.pages[index].text : "" }, set: { newValue in
@@ -148,110 +198,286 @@ struct ContentView: View {
             workspace.pages[index].text = newValue; workspace.pages[index].revision += 1; workspace.dirty = true
         })
     }
+
+    // MARK: Derived state
+
+    /// Only call when `workspace.pages` is not empty.
+    private var currentPage: DraftPage { workspace.pages[workspace.selectedPage] }
+    private var convertedCount: Int {
+        workspace.pages.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
+    }
+    private var hasUnconvertedPages: Bool {
+        workspace.pages.contains { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    private var pageSubtitle: String {
+        guard !workspace.pages.isEmpty else { return "" }
+        let base = "Page \(workspace.selectedPage + 1) of \(workspace.pages.count)"
+        let status = currentPage.status
+        // The repeated-paragraph warning gets its own callout in the content area.
+        if status.isEmpty || status.hasPrefix("Possible repeated paragraphs") { return base }
+        return "\(base) · \(status)"
+    }
+
+    // MARK: Actions
+
+    private func openPDF() {
+        if workspace.open() { Task { await workspace.recognizeAll() } }
+    }
+    private func step(_ delta: Int) {
+        workspace.selectedPage += delta; workspace.selection = nil; workspace.draftSelection = nil; workspace.dirty = true
+    }
+
+    // MARK: Body
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Button("Open PDF") { if workspace.open() { Task { await workspace.recognizeAll() } } }.disabled(workspace.processing)
-                Button("Open Project") { workspace.openProject() }.disabled(workspace.processing)
-                Button("Save Project") { workspace.saveProject() }.disabled(workspace.document == nil || workspace.processing)
-                Button("Save Project As…") { workspace.saveProject(asNew: true) }.disabled(workspace.document == nil || workspace.processing)
-                if workspace.batchIndex != nil {
-                    Button("Stop & Save Project") { workspace.stopRequested = true }.disabled(workspace.stopRequested)
-                }
-                Button("Export PDF") { Task { await workspace.export() } }.disabled(workspace.pages.isEmpty || workspace.processing)
-                Spacer()
-                if !model.ready {
-                    Button("Download Model") { Task { await model.prepare() } }.disabled(model.busy || workspace.processing)
-                } else {
-                    Button("Remove Model") { model.remove() }.disabled(model.busy || workspace.processing)
-                }
-            }
-            HStack {
-                Text(model.status).font(.caption)
-                if model.busy { ProgressView(value: model.progress).frame(width: 150) }
-                Spacer(); Text(workspace.message).font(.caption)
-            }
-            if let index = workspace.batchIndex {
-                HStack {
-                    Text(workspace.stopRequested ? "Finishing page \(index + 1) before stopping…" : "Converting page \(index + 1) of \(workspace.pages.count)")
-                    ProgressView(value: Double(workspace.batchCompleted), total: Double(workspace.pages.count)).frame(width: 150)
-                }.font(.caption)
-            }
-            if workspace.showRemaining && !workspace.processing && workspace.pages.contains(where: { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-                HStack {
-                    let converted = workspace.pages.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
-                    Text("\(converted) of \(workspace.pages.count) pages converted")
-                    ProgressView(value: Double(converted), total: Double(workspace.pages.count)).frame(width: 150)
-                    Text("Some pages still need to be converted.").foregroundStyle(.secondary)
-                    Button("Convert Remaining Pages") { Task { await workspace.recognizeAll() } }
-                }.font(.caption)
-            }
-            if workspace.pages.isEmpty {
-                ContentUnavailableView("Open handwritten notes", systemImage: "doc.text", description: Text("Opening a PDF starts recognition. First use downloads an OCR model (about 2.2 GB). Recognition and export run on your Mac."))
-            } else {
-                HStack {
-                    Button("Previous") { workspace.selectedPage -= 1; workspace.selection = nil; workspace.draftSelection = nil; workspace.dirty = true }.disabled(workspace.selectedPage == 0 || (workspace.processing && workspace.batchIndex == nil))
-                    Text("Page \(workspace.selectedPage + 1) of \(workspace.pages.count)")
-                    Button("Next") { workspace.selectedPage += 1; workspace.selection = nil; workspace.draftSelection = nil; workspace.dirty = true }.disabled(workspace.selectedPage + 1 >= workspace.pages.count || (workspace.processing && workspace.batchIndex == nil))
-                    Button("Retry Page") { Task { await workspace.recognize(workspace.selectedPage) } }.disabled(workspace.processing)
-                    if workspace.pages[workspace.selectedPage].previousCorrection != nil {
-                        Button("Compare Recognition") { workspace.compareEarlierDraft() }.disabled(workspace.processing)
-                        Button("Restore Earlier Draft") { workspace.restoreBeforeCorrection() }.disabled(workspace.processing)
-                    }
-                    Text(workspace.pages[workspace.selectedPage].status).font(.caption)
-                    Spacer()
-                    Button("Add Selected Figure") { workspace.addSelection() }.disabled(workspace.selection == nil || !workspace.canEditSelectedPage)
-                    Button("Replace with Original") { workspace.addSelection(replaceDraft: true) }.disabled(workspace.selection == nil || workspace.draftSelection == nil || !workspace.canEditSelectedPage)
-                    if let undo = workspace.replacementUndo, workspace.pages[workspace.selectedPage].id == undo.pageID, workspace.pages[workspace.selectedPage].text == undo.after {
-                        Button("Undo Replacement") { workspace.undoReplacement() }.disabled(!workspace.canEditSelectedPage)
-                    }
-                }
-                if workspace.pages[workspace.selectedPage].status.hasPrefix("Possible repeated paragraphs") {
-                    Text(workspace.pages[workspace.selectedPage].status).foregroundStyle(.orange)
-                }
-                HSplitView {
-                    VStack(alignment: .leading) {
-                        Text("Original — drag to select a figure or equation crop").font(.headline)
-                        PageImageView(image: workspace.image(for: workspace.selectedPage), selection: $workspace.selection)
-                    }.frame(minWidth: 320)
-                    VSplitView {
-                        VStack(alignment: .leading) {
-                            Text("Edit text and LaTeX").font(.headline)
-                            if !workspace.canEditSelectedPage { Text("This page can be edited after conversion finishes.").font(.caption).foregroundStyle(.secondary) }
-                            DraftEditor(text: draftBinding(index: workspace.selectedPage), insertMarker: $workspace.markerToInsert, selectedRange: $workspace.draftSelection, markerPageID: workspace.markerPageID, pageID: workspace.pages[workspace.selectedPage].id, editable: workspace.canEditSelectedPage).id(workspace.selectedPage)
-                        }.frame(minHeight: 160)
-                        VStack(alignment: .leading) {
-                            Text("Rendered preview").font(.headline)
-                            if !workspace.mathError.isEmpty { Text(workspace.mathError).foregroundStyle(.red).font(.caption) }
-                            DraftPreview(page: workspace.pages[workspace.selectedPage], error: $workspace.mathError) { id, revision, seconds in
-                                guard let index = workspace.pages.firstIndex(where: { $0.id == id }), workspace.pages[index].revision == revision else { return }
-                                workspace.pages[index].timings.previewSeconds = seconds
-                            }
-                        }.frame(minHeight: 160)
-                    }.frame(minWidth: 360)
-                }
-                TimingDetails(timings: workspace.pages[workspace.selectedPage].timings)
-            }
-        }.padding().frame(minWidth: 850, minHeight: 600)
+        Group {
+            if workspace.pages.isEmpty { emptyState } else { workArea }
+        }
+        .frame(minWidth: 850, minHeight: 600)
+        .navigationSubtitle(pageSubtitle)
+        .toolbar { toolbarItems }
+        .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
         .sheet(item: $workspace.correctionProposal) { proposal in
             CorrectionReview(workspace: workspace, proposal: proposal)
         }
     }
-}
 
-struct TimingDetails: View {
-    let timings: PageTimings
-    private func value(_ seconds: Double?) -> String { seconds.map { String(format: "%.2f s", $0) } ?? "—" }
-    var body: some View {
-        DisclosureGroup("Page timings") {
-            VStack(alignment: .leading) {
-                Text("Page image: \(value(timings.pageRenderSeconds)) · OCR setup: \(value(timings.ocrSetupSeconds)) · OCR: \(value(timings.ocrRecognitionSeconds))")
-                Text("Preview: \(value(timings.previewSeconds))")
-                Text("The first OCR call also includes lazy model loading. Preview timing ends when the local page finishes loading.").foregroundStyle(.secondary)
-            }.font(.caption)
-        }.font(.caption)
+    // MARK: Toolbar (system chrome, secondary actions demoted into menus)
+
+    @ToolbarContentBuilder
+    private var toolbarItems: some ToolbarContent {
+        ToolbarItemGroup(placement: .automatic) {
+            Button { step(-1) } label: { Label("Previous Page", systemImage: "chevron.left") }
+                .keyboardShortcut("[", modifiers: .command)
+                .disabled(workspace.selectedPage == 0 || (workspace.processing && workspace.batchIndex == nil))
+                .help("Previous Page")
+            Button { step(1) } label: { Label("Next Page", systemImage: "chevron.right") }
+                .keyboardShortcut("]", modifiers: .command)
+                .disabled(workspace.selectedPage + 1 >= workspace.pages.count || (workspace.processing && workspace.batchIndex == nil))
+                .help("Next Page")
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button { openPDF() } label: { Label("Open PDF", systemImage: "doc.badge.plus") }
+                .keyboardShortcut("o", modifiers: .command)
+                .disabled(workspace.processing)
+                .help("Open PDF")
+            Button { Task { await workspace.export() } } label: { Label("Export PDF", systemImage: "square.and.arrow.up") }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(workspace.pages.isEmpty || workspace.processing)
+                .help("Export PDF")
+            Menu {
+                Button("Open Project") { workspace.openProject() }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    .disabled(workspace.processing)
+                Divider()
+                Button("Save Project") { workspace.saveProject() }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(workspace.document == nil || workspace.processing)
+                Button("Save Project As…") { workspace.saveProject(asNew: true) }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(workspace.document == nil || workspace.processing)
+            } label: { Label("Project", systemImage: "folder") }
+                .help("Project")
+            if !model.ready && !model.hasDownloadedFiles {
+                Menu {
+                    Button("Download Model") { Task { await workspace.prepareModel() } }
+                        .disabled(model.busy || workspace.processing)
+                } label: { Label("OCR Model", systemImage: "cpu") }
+                    .help("OCR Model")
+            }
+            // Restore this action in Settings when model management is added.
+            // Button("Remove Model", role: .destructive) { model.remove() }
+            //     .disabled(model.busy || workspace.processing)
+        }
+    }
+
+    // MARK: Empty state
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("Coverts your handwritten notes to typeset PDFs", systemImage: "doc.text")
+        } description: {
+            Text("First use downloads an OCR model (about 2.2 GB). Recognition and export run on your Mac.")
+        } actions: {
+            Button("Open PDF") { openPDF() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(workspace.processing)
+            if !model.ready && !model.hasDownloadedFiles {
+                Button("Download Model") { Task { await workspace.prepareModel() } }
+                    .controlSize(.large)
+                    .disabled(model.busy || workspace.processing)
+            }
+        }
+    }
+
+    // MARK: Work area
+
+    private var workArea: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if currentPage.status.hasPrefix("Possible repeated paragraphs") {
+                Label(currentPage.status, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+            }
+            HSplitView {
+                originalPane
+                VSplitView {
+                    draftPane
+                    previewPane
+                }.frame(minWidth: 360)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var originalPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PaneHeader("Original") {
+                Button { workspace.addSelection() } label: { Label("Add Selected Figure", systemImage: "plus.rectangle.on.rectangle") }
+                    .disabled(workspace.selection == nil || !workspace.canEditSelectedPage)
+                    .help("Add Selected Figure")
+                Button { workspace.addSelection(replaceDraft: true) } label: { Label("Replace with Original", systemImage: "photo.on.rectangle") }
+                    .disabled(workspace.selection == nil || workspace.draftSelection == nil || !workspace.canEditSelectedPage)
+                    .help("Replace with Original")
+                if let undo = workspace.replacementUndo, workspace.pages[workspace.selectedPage].id == undo.pageID, workspace.pages[workspace.selectedPage].text == undo.after {
+                    Button { workspace.undoReplacement() } label: { Label("Undo Replacement", systemImage: "arrow.uturn.backward") }
+                        .disabled(!workspace.canEditSelectedPage)
+                        .help("Undo Replacement")
+                }
+            }
+            Text("Drag to select a figure or equation crop")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            PageImageView(image: workspace.image(for: workspace.selectedPage), selection: $workspace.selection)
+                .paneSurface()
+        }
+        .padding(12)
+        .frame(minWidth: 320)
+    }
+
+    private var draftPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PaneHeader("Edit text and LaTeX") {
+                Button { Task { await workspace.recognize(workspace.selectedPage) } } label: { Label("Retry Page", systemImage: "arrow.clockwise") }
+                    .disabled(workspace.processing)
+                    .help("Retry Page")
+                if currentPage.previousCorrection != nil {
+                    Button { workspace.compareEarlierDraft() } label: { Label("Compare Recognition", systemImage: "rectangle.split.2x1") }
+                        .disabled(workspace.processing)
+                        .help("Compare Recognition")
+                    Button { workspace.restoreBeforeCorrection() } label: { Label("Restore Earlier Draft", systemImage: "clock.arrow.circlepath") }
+                        .disabled(workspace.processing)
+                        .help("Restore Earlier Draft")
+                }
+            }
+            if !workspace.canEditSelectedPage {
+                Text("This page can be edited after conversion finishes.").font(.caption).foregroundStyle(.secondary)
+            }
+            DraftEditor(text: draftBinding(index: workspace.selectedPage), insertMarker: $workspace.markerToInsert, selectedRange: $workspace.draftSelection, markerPageID: workspace.markerPageID, pageID: workspace.pages[workspace.selectedPage].id, editable: workspace.canEditSelectedPage)
+                .id(workspace.selectedPage)
+                .paneSurface()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 160)
+    }
+
+    private var previewPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PaneHeader("Rendered preview")
+            if !workspace.mathError.isEmpty {
+                Label(workspace.mathError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            DraftPreview(page: currentPage, error: $workspace.mathError) { id, revision, seconds in
+                guard let index = workspace.pages.firstIndex(where: { $0.id == id }), workspace.pages[index].revision == revision else { return }
+                workspace.pages[index].timings.previewSeconds = seconds
+            }
+            .paneSurface()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 160)
+    }
+
+    // MARK: Status bar (progress and messages live here, out of the way)
+
+    private var statusBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            if let index = workspace.batchIndex {
+                HStack(spacing: 10) {
+                    Text(workspace.stopRequested ? "Finishing page \(index + 1) before stopping…" : "Converting page \(index + 1) of \(workspace.pages.count)")
+                    ProgressView(value: Double(workspace.batchCompleted), total: Double(workspace.pages.count)).frame(width: 150)
+                    Spacer()
+                    Button("Stop & Save Project") { workspace.stopRequested = true }
+                        .controlSize(.small)
+                        .disabled(workspace.stopRequested)
+                }
+                .font(.caption)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            if workspace.showRemaining && !workspace.processing && hasUnconvertedPages {
+                HStack(spacing: 10) {
+                    Text("\(convertedCount) of \(workspace.pages.count) pages converted")
+                    ProgressView(value: Double(convertedCount), total: Double(workspace.pages.count)).frame(width: 150)
+                    Text("Some pages still need to be converted.").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Convert Remaining Pages") { Task { await workspace.recognizeAll() } }
+                        .controlSize(.small)
+                }
+                .font(.caption)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            HStack(spacing: 10) {
+                Text(model.status).lineLimit(1)
+                if model.busy { ProgressView(value: model.progress).frame(width: 150) }
+                Spacer()
+                Text(workspace.message).lineLimit(1)
+                if !workspace.pages.isEmpty {
+                    TimingDetails(timings: currentPage.timings)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+        .background(.bar)
     }
 }
+
+/// Diagnostics are tucked into a popover instead of a permanent row.
+struct TimingDetails: View {
+    let timings: PageTimings
+    @State private var shown = false
+    private func value(_ seconds: Double?) -> String { seconds.map { String(format: "%.2f s", $0) } ?? "—" }
+    var body: some View {
+        Button { shown.toggle() } label: { Label("Page timings", systemImage: "stopwatch") }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help("Page timings")
+            .popover(isPresented: $shown, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Page timings").font(.headline)
+                    Text("Page image: \(value(timings.pageRenderSeconds)) · OCR setup: \(value(timings.ocrSetupSeconds)) · OCR: \(value(timings.ocrRecognitionSeconds))")
+                    Text("Preview: \(value(timings.previewSeconds))")
+                    Text("The first OCR call also includes lazy model loading. Preview timing ends when the local page finishes loading.").foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .padding(14)
+                .frame(width: 360, alignment: .leading)
+            }
+    }
+}
+
+// MARK: - Correction review sheet
 
 struct CorrectionReview: View {
     @ObservedObject var workspace: Workspace
@@ -259,37 +485,63 @@ struct CorrectionReview: View {
     @State private var currentError = ""
     @State private var proposedError = ""
 
+    private func column<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PaneHeader(title)
+            content().paneSurface()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     var body: some View {
         let index = workspace.pages.firstIndex { $0.id == proposal.pageID } ?? workspace.selectedPage
         var current = workspace.pages[index]; current.text = proposal.original
         var proposed = workspace.pages[index]; proposed.text = proposal.proposed
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(proposal.isComparison ? "Compare recognition results" : "Compare the suggestion").font(.title2)
-            Text("The model can change symbols, add text, or leave things out. Compare each part with the original before exporting.")
-            if proposal.hasRenderingIssues { Text("This suggestion has incomplete math, repeated text, or unsupported formatting. Keep the current draft and try again.").foregroundStyle(.red) }
-            HStack(alignment: .top) {
-                VStack(alignment: .leading) {
-                    Text("Original page").font(.headline)
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(proposal.isComparison ? "Compare recognition results" : "Compare the suggestion").font(.title2.weight(.semibold))
+                Text("The model can change symbols, add text, or leave things out. Compare each part with the original before exporting.")
+                    .foregroundStyle(.secondary)
+            }
+            if proposal.hasRenderingIssues {
+                Label("This suggestion has incomplete math, repeated text, or unsupported formatting. Keep the current draft and try again.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+            }
+            HStack(alignment: .top, spacing: 12) {
+                column("Original page") {
                     PageImageView(image: workspace.image(for: index), selection: .constant(nil))
                 }
-                VStack(alignment: .leading) {
-                    Text(proposal.isComparison ? "Original recognition" : "Current draft").font(.headline)
+                column(proposal.isComparison ? "Original recognition" : "Current draft") {
                     DraftPreview(page: current, error: $currentError)
                 }
-                VStack(alignment: .leading) {
-                    Text(proposal.isComparison ? "Current refined draft" : "Suggested draft").font(.headline)
+                column(proposal.isComparison ? "Current refined draft" : "Suggested draft") {
                     DraftPreview(page: proposed, error: $proposedError)
                 }
             }
+            .frame(maxHeight: .infinity)
             HStack {
                 Button(proposal.isComparison ? "Close" : "Keep Current Draft") { workspace.correctionProposal = nil }
+                    .keyboardShortcut(.cancelAction)
                 if !proposal.isComparison { Button("Try Again") { workspace.correctionProposal = nil; Task { await workspace.proposeCorrection() } } }
                 Spacer()
-                if !proposal.isComparison { Button("Use Suggestion") { workspace.useCorrection(proposal) }.disabled(proposal.hasRenderingIssues) }
+                if !proposal.isComparison {
+                    Button("Use Suggestion") { workspace.useCorrection(proposal) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(proposal.hasRenderingIssues)
+                }
             }
-        }.padding().frame(minWidth: 1100, minHeight: 650)
+        }
+        .padding(20)
+        .frame(minWidth: 1100, minHeight: 650)
     }
 }
+
+#Preview("Pulp") {
+    ContentView(workspace: Workspace())
+}
+
+// MARK: - App
 
 @MainActor
 final class NotesDelegate: NSObject, NSApplicationDelegate {
