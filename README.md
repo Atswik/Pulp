@@ -14,7 +14,7 @@ Pulp is a native macOS app that turns your handwritten notes into typeset PDFs y
 
 1. Open a PDF. The app renders each page at a maximum dimension of 2200 pixels, then downsamples the recognition image to a maximum of 1100 pixels using Apple's Lanczos filter.
 2. GLM-OCR recognizes pages locally, one at a time. The app shows progress and page-level errors.
-3. Review the draft beside the original. Correct text and LaTeX; OCR can miss text or change mathematical symbols. To preserve a diagram or an uncertain equation, select a region and choose **Add Selected Figure**. Move its marker in the draft to change its position.
+3. Review the draft beside the original. Correct text and LaTeX; OCR can miss text or change mathematical symbols. To preserve a diagram or an uncertain equation, select a region and choose **Add Selected Figure**. Move its marker in the draft to change its position. To replace incorrect draft text with a crop, select the text and original region, then choose **Replace with Original**.
 4. Choose **Export PDF**, then reopen the typeset PDF to check the result.
 
 The original PDF is not modified. The larger page image remains available for preview and figure crops. The OCR engine sits behind an interface so other recognizers can be evaluated later.
@@ -22,6 +22,8 @@ The original PDF is not modified. The larger page image remains available for pr
 The editor exposes LaTeX for math, and figures are selected manually. Cropped figures and equations are images. Equations rendered from LaTeX are visible, but their text selection and extraction may be incomplete. The initial scope is small, single-column English notes.
 
 Choose **Save Project** to save the original PDF, drafts, crops, and current page in a self-contained `.pulp` file. Choose **Open Project** to continue reviewing it later. Exporting a PDF is separate and does not save the project.
+
+During conversion, **Stop & Save Project** finishes the current page, then stops and saves your work. Open the project later and choose **Convert Remaining Pages** to continue. Pulp keeps the OCR model loaded while converting, then releases it and clears MLX's unused cache after five minutes of inactivity. The downloaded model files stay on disk for later use.
 
 ## Evaluation
 
@@ -44,9 +46,11 @@ From the project folder, run:
 ./macos/run-app.sh
 ```
 
+To work in Xcode, open `macos/Pulp.xcodeproj` and select the Pulp scheme. The Debug app target enables Xcode previews; open `Views.swift` and show the Canvas. Archiving for distribution will require signing and release configuration.
+
 The script builds and opens the app. If the Metal toolchain is missing, install it with `xcodebuild -downloadComponent MetalToolchain`. This is a developer-run build; it is not signed for distribution or notarized.
 
-Open a PDF to start conversion. If model setup fails, resolve the issue and use **Convert Remaining Pages** or **Retry Page**. You can remove the downloaded model with **Remove Model** in the app.
+Open a PDF to start conversion. If model setup fails, resolve the issue and use **Convert Remaining Pages** or **Retry Page**.
 
 ## Tech stack
 
