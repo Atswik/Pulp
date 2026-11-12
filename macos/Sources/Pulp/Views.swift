@@ -186,6 +186,48 @@ struct DraftPreview: NSViewRepresentable {
 
 // MARK: - Main window
 
+@MainActor
+final class CloseConfirmationDelegate: NSObject, NSWindowDelegate {
+    weak var original: (any NSWindowDelegate)?
+    let workspace: Workspace
+
+    init(workspace: Workspace) { self.workspace = workspace }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard original?.windowShouldClose?(sender) ?? true else { return false }
+        guard workspace.confirmDiscard() else { return false }
+        workspace.dirty = false
+        return true
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || (original?.responds(to: selector) ?? false)
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        original?.responds(to: selector) == true ? original : super.forwardingTarget(for: selector)
+    }
+}
+
+private struct WindowCloseConfirmation: NSViewRepresentable {
+    let workspace: Workspace
+    func makeCoordinator() -> CloseConfirmationDelegate { CloseConfirmationDelegate(workspace: workspace) }
+    func makeNSView(context: Context) -> Probe { Probe(delegate: context.coordinator) }
+    func updateNSView(_ view: Probe, context: Context) { view.install() }
+
+    final class Probe: NSView {
+        let closeDelegate: CloseConfirmationDelegate
+        init(delegate: CloseConfirmationDelegate) { closeDelegate = delegate; super.init(frame: .zero) }
+        required init?(coder: NSCoder) { nil }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); install() }
+        func install() {
+            guard let window, window.delegate !== closeDelegate else { return }
+            closeDelegate.original = window.delegate
+            window.delegate = closeDelegate
+        }
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var workspace: Workspace
     @ObservedObject var model: ModelStore
@@ -236,6 +278,7 @@ struct ContentView: View {
         .frame(minWidth: 850, minHeight: 600)
         .navigationSubtitle(pageSubtitle)
         .toolbar { toolbarItems }
+        .background { WindowCloseConfirmation(workspace: workspace) }
         .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
         .sheet(item: $workspace.correctionProposal) { proposal in
             CorrectionReview(workspace: workspace, proposal: proposal)
@@ -547,7 +590,9 @@ struct CorrectionReview: View {
 final class NotesDelegate: NSObject, NSApplicationDelegate {
     static let workspace = Workspace()
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        Self.workspace.confirmDiscard() ? .terminateNow : .terminateCancel
+        guard Self.workspace.confirmDiscard() else { return .terminateCancel }
+        Self.workspace.dirty = false
+        return .terminateNow
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 }
